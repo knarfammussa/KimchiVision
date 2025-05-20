@@ -17,3 +17,8 @@ where n is 0, 1, 2, or 3 depending on the device ID you want to use. After that'
 ```bash
 echo $CUDA_VISIBLE_DEVICES
 ```
+
+Conda environment setup:
+```bash
+conda create --name <env> --file requirements.txt
+```
