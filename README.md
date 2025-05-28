@@ -20,5 +20,5 @@ echo $CUDA_VISIBLE_DEVICES
 
 Conda environment setup:
 ```bash
-conda create --name <env> --file requirements.txt
+conda env create -f full_environment.yml -n <env_name>
 ```
