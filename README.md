@@ -22,3 +22,7 @@ Conda environment setup:
 ```bash
 conda env create -f full_environment.yml -n <env_name>
 ```
+export env 
+```bash
+conda env export --no-builds > full_environment.yml
+```
