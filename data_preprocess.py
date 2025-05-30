@@ -131,7 +131,8 @@ def decode_map_features_from_proto(map_features):
             map_infos['speed_bump'].append(cur_info)
 
         else:
-            print(cur_data)
+            # print(cur_data)
+            continue
             raise ValueError
 
         polylines.append(cur_polyline)
@@ -200,11 +201,11 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None):
         }
         save_infos.update(info)
 
-        output_file = os.path.join(output_path, f'sample_{scenario.scenario_id}.pkl')
-        with open(output_file, 'wb') as f:
-            pickle.dump(save_infos, f)
+        # output_file = os.path.join(output_path, f'sample_{scenario.scenario_id}.pkl')
+        # with open(output_file, 'wb') as f:
+        #     pickle.dump(save_infos, f)
 
-        ret_infos.append(info)
+        ret_infos.append(save_infos)
     return ret_infos
 
 
