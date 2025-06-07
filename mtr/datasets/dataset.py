@@ -73,7 +73,7 @@ class DatasetTemplate(torch_data.Dataset):
         for key, val_list in key_to_list.items():
 
             if key in ['obj_trajs', 'obj_trajs_mask', 'map_polylines', 'map_polylines_mask', 'map_polylines_center',
-                'obj_trajs_pos', 'obj_trajs_last_pos', 'obj_trajs_future_state', 'obj_trajs_future_mask', 'static_map_polylines' ]:
+                'obj_trajs_pos', 'obj_trajs_last_pos', 'obj_trajs_future_state', 'obj_trajs_future_mask', 'static_map_polylines', "static_map_polylines_mask" ]:
 
                 val_list = [torch.from_numpy(x) for x in val_list]
                 

@@ -151,7 +151,7 @@ class WaymoDataset(DatasetTemplate):
             
             
             static_map_polylines, static_map_polylines_mask = self.get_static_map_info(
-                polylines=info['map_infos']['all_polylines']
+                polylines=info['map_infos']['all_polylines'], center_objects=center_objects
             )
             ret_dict['static_map_polylines'] = static_map_polylines
             ret_dict['static_map_polylines_mask'] = (static_map_polylines_mask > 0)
@@ -511,7 +511,14 @@ class WaymoDataset(DatasetTemplate):
 
         return map_polylines, map_polylines_mask, map_polylines_center
 
-    def get_static_map_info(self,polylines):
+    def get_static_map_info(self,polylines, center_objects):
+        """
+        Args:
+            polylines (num_points, 7): [x, y, z, dir_x, dir_y, dir_z, global_type]
+        Returns:
+            static_map_polylines (center_objects,max_num_polylines, num_points_each_polyline, 9): [x, y, z, dir_x, dir_y, dir_z, global_type, pre_x, pre_y]
+            static_map_polylines_mask (center_objects,max_num_polylines, num_points_each_polyline)
+        """
         #CUSTOM
         batch_polylines, batch_polylines_mask = self.generate_batch_polylines_from_map(
             polylines=polylines, point_sampled_interval=self.dataset_cfg.get('POINT_SAMPLED_INTERVAL', 1),
@@ -546,6 +553,9 @@ class WaymoDataset(DatasetTemplate):
             static_map_polylines_mask = torch.ones(
                 (max_num_polylines, num_points), dtype=torch.bool, device=static_map_polylines.device
             )
+        # add center num dimension
+        static_map_polylines = static_map_polylines[None, :, :, :].repeat(center_objects.shape[0], 1, 1, 1)
+        static_map_polylines_mask = static_map_polylines_mask[None, :, :].repeat(center_objects.shape[0], 1, 1)
         return static_map_polylines.numpy(), static_map_polylines_mask.numpy()
 
     def generate_prediction_dicts(self, batch_dict, output_path=None):
