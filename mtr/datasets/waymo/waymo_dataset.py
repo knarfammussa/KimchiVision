@@ -102,6 +102,7 @@ class WaymoDataset(DatasetTemplate):
             obj_types=obj_types, scene_id=scene_id
         )
 
+
         (obj_trajs_data, obj_trajs_mask, obj_trajs_pos, obj_trajs_last_pos, obj_trajs_future_state, obj_trajs_future_mask, center_gt_trajs,
             center_gt_trajs_mask, center_gt_final_valid_idx,
             track_index_to_predict_new, sdc_track_index_new, obj_types, obj_ids) = self.create_agent_data_for_center_objects(
@@ -142,11 +143,22 @@ class WaymoDataset(DatasetTemplate):
                 center_offset=self.dataset_cfg.get('CENTER_OFFSET_OF_MAP', (30.0, 0)),
             )   # (num_center_objects, num_topk_polylines, num_points_each_polyline, 9), (num_center_objects, num_topk_polylines, num_points_each_polyline)
 
+
+
             ret_dict['map_polylines'] = map_polylines_data
+            ret_dict['map_polylines_mask'] = (map_polylines_mask > 0)
             ret_dict['map_polylines_center'] = map_polylines_center
+            
+            
+            static_map_polylines, static_map_polylines_mask = self.get_static_map_info(
+                polylines=info['map_infos']['all_polylines']
+            )
+            ret_dict['static_map_polylines'] = static_map_polylines
+            ret_dict['static_map_polylines_mask'] = (static_map_polylines_mask > 0)
+            
 
         return ret_dict
-
+    
     def create_agent_data_for_center_objects(
             self, center_objects, obj_trajs_past, obj_trajs_future, track_index_to_predict, sdc_track_index, timestamps,
             obj_types, obj_ids
@@ -206,7 +218,7 @@ class WaymoDataset(DatasetTemplate):
         for k in range(len(track_index_to_predict)):
             obj_idx = track_index_to_predict[k]
 
-            assert obj_trajs_full[obj_idx, current_time_index, -1] > 0, f'obj_idx={obj_idx}, scene_id={scene_id}'
+            assert obj_trajs_full[obj_idx, current_time_index, -1] > 0, f'obj_idx={obj_idx}, scene_id={scene_id} list={obj_trajs_full[obj_idx, current_time_index]}'
 
             center_objects_list.append(obj_trajs_full[obj_idx, current_time_index])
             track_index_to_predict_selected.append(obj_idx)
@@ -378,6 +390,8 @@ class WaymoDataset(DatasetTemplate):
         # assert center_dist.max() < 10
         return ret_polylines, ret_polylines_mask
 
+        
+
     def create_map_data_for_center_objects(self, center_objects, map_infos, center_offset):
         """
         Args:
@@ -424,6 +438,7 @@ class WaymoDataset(DatasetTemplate):
 
         # collect a number of closest polylines for each center objects
         num_of_src_polylines = self.dataset_cfg.NUM_OF_SRC_POLYLINES
+        
 
         if len(batch_polylines) > num_of_src_polylines:
             polyline_center = batch_polylines[:, :, 0:2].sum(dim=1) / torch.clamp_min(batch_polylines_mask.sum(dim=1).float()[:, None], min=1.0)
@@ -435,6 +450,7 @@ class WaymoDataset(DatasetTemplate):
 
             pos_of_map_centers = center_objects[:, 0:2] + center_offset_rot
 
+
             dist = (pos_of_map_centers[:, None, :] - polyline_center[None, :, :]).norm(dim=-1)  # (num_center_objects, num_polylines)
             topk_dist, topk_idxs = dist.topk(k=num_of_src_polylines, dim=-1, largest=False)
             map_polylines = batch_polylines[topk_idxs]  # (num_center_objects, num_topk_polylines, num_points_each_polyline, 7)
@@ -442,6 +458,41 @@ class WaymoDataset(DatasetTemplate):
         else:
             map_polylines = batch_polylines[None, :, :, :].repeat(num_center_objects, 1, 1, 1)
             map_polylines_mask = batch_polylines_mask[None, :, :].repeat(num_center_objects, 1, 1)
+
+        # #CUSTOM
+        # # Should stack by batch size
+        # static_map_polylines = batch_polylines.clone()
+        # max_num_polylines = self.dataset_cfg.get('MAX_NUM_POLYLINES', 4000)
+        # num_polylines, num_points, feat_dim = batch_polylines.shape
+
+        # # 1. Trim if too many polylines
+        # if num_polylines > max_num_polylines:
+        #     static_map_polylines = batch_polylines[:max_num_polylines]
+        #     static_map_polylines_mask = torch.ones(
+        #         (max_num_polylines, num_points), dtype=torch.bool, device=static_map_polylines.device
+        #     )
+
+        # # 2. Pad if too few polylines
+        # elif num_polylines < max_num_polylines:
+        #     pad_size = max_num_polylines - num_polylines
+
+        #     padding = torch.zeros((pad_size, num_points, feat_dim),
+        #                         dtype=static_map_polylines.dtype,
+        #                         device=static_map_polylines.device)
+        #     static_map_polylines = torch.cat([static_map_polylines, padding], dim=0)
+
+        #     mask_valid = torch.ones((num_polylines, num_points), dtype=torch.bool, device=static_map_polylines.device)
+        #     mask_pad = torch.zeros((pad_size, num_points), dtype=torch.bool, device=static_map_polylines.device)
+        #     static_map_polylines_mask = torch.cat([mask_valid, mask_pad], dim=0)
+
+        # # 3. If exactly equal
+        # else:
+        #     static_map_polylines_mask = torch.ones(
+        #         (max_num_polylines, num_points), dtype=torch.bool, device=static_map_polylines.device
+        #     )
+
+
+
 
         map_polylines, map_polylines_mask = transform_to_center_coordinates(
             neighboring_polylines=map_polylines,
@@ -455,7 +506,47 @@ class WaymoDataset(DatasetTemplate):
         map_polylines_mask = map_polylines_mask.numpy()
         map_polylines_center = map_polylines_center.numpy()
 
+        # static_map_polylines = static_map_polylines.numpy()
+        # static_map_polylines_mask = static_map_polylines_mask.numpy()
+
         return map_polylines, map_polylines_mask, map_polylines_center
+
+    def get_static_map_info(self,polylines):
+        #CUSTOM
+        batch_polylines, batch_polylines_mask = self.generate_batch_polylines_from_map(
+            polylines=polylines, point_sampled_interval=self.dataset_cfg.get('POINT_SAMPLED_INTERVAL', 1),
+            vector_break_dist_thresh=self.dataset_cfg.get('VECTOR_BREAK_DIST_THRESH', 1.0),
+            num_points_each_polyline=self.dataset_cfg.get('NUM_POINTS_EACH_POLYLINE', 20),
+        )
+        static_map_polylines = batch_polylines
+        max_num_polylines = self.dataset_cfg.get('MAX_NUM_POLYLINES', 4000)
+        num_polylines, num_points, feat_dim = static_map_polylines.shape
+
+        # 1. Trim if too many polylines
+        if num_polylines > max_num_polylines:
+            static_map_polylines = static_map_polylines[:max_num_polylines]
+            static_map_polylines_mask = torch.ones(
+                (max_num_polylines, num_points), dtype=torch.bool, device=static_map_polylines.device
+            )
+
+        # 2. Pad if too few polylines
+        elif num_polylines < max_num_polylines:
+            pad_size = max_num_polylines - num_polylines
+
+            padding = torch.zeros((pad_size, num_points, feat_dim),
+                                dtype=static_map_polylines.dtype,
+                                device=static_map_polylines.device)
+            static_map_polylines = torch.cat([static_map_polylines, padding], dim=0)
+
+            mask_valid = torch.ones((num_polylines, num_points), dtype=torch.bool, device=static_map_polylines.device)
+            mask_pad = torch.zeros((pad_size, num_points), dtype=torch.bool, device=static_map_polylines.device)
+            static_map_polylines_mask = torch.cat([mask_valid, mask_pad], dim=0)
+              # 3. If exactly equal
+        else:
+            static_map_polylines_mask = torch.ones(
+                (max_num_polylines, num_points), dtype=torch.bool, device=static_map_polylines.device
+            )
+        return static_map_polylines.numpy(), static_map_polylines_mask.numpy()
 
     def generate_prediction_dicts(self, batch_dict, output_path=None):
         """

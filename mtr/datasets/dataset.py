@@ -60,6 +60,9 @@ class DatasetTemplate(torch_data.Dataset):
             center_gt_trajs (num_center_objects, num_future_timestamps, 4): [x, y, vx, vy]
             center_gt_trajs_mask (num_center_objects, num_future_timestamps):
             center_gt_final_valid_idx (num_center_objects): the final valid timestamp in num_future_timestamps
+            #custom
+            static_map_polylines (num_center_objects, num_polylines, num_points_each_polyline, 9): [x, y, z, dir_x, dir_y, dir_z, global_type, pre_x, pre_y]
+            static_map_polylines_mask (num_center_objects, num_polylines, num_points_each_polyline)
         """
         batch_size = len(batch_list)
         key_to_list = {}
@@ -70,8 +73,10 @@ class DatasetTemplate(torch_data.Dataset):
         for key, val_list in key_to_list.items():
 
             if key in ['obj_trajs', 'obj_trajs_mask', 'map_polylines', 'map_polylines_mask', 'map_polylines_center',
-                'obj_trajs_pos', 'obj_trajs_last_pos', 'obj_trajs_future_state', 'obj_trajs_future_mask']:
+                'obj_trajs_pos', 'obj_trajs_last_pos', 'obj_trajs_future_state', 'obj_trajs_future_mask', 'static_map_polylines' ]:
+
                 val_list = [torch.from_numpy(x) for x in val_list]
+                
                 input_dict[key] = common_utils.merge_batch_by_padding_2nd_dim(val_list)
             elif key in ['scenario_id', 'obj_types', 'obj_ids', 'center_objects_type', 'center_objects_id']:
                 input_dict[key] = np.concatenate(val_list, axis=0)
