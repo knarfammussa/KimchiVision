@@ -36,8 +36,11 @@ class MotionLSTM(nn.Module):
 
     '''
     def __init__(self, 
-                # Each obj comes with 36 parameters
-                input_dim=36,
+                input_dim=29,  # Based on MTR dataset obj_trajs feature dimension
+                # Map polylines encoder parameters
+                map_polyline_encoder_output_dim=256,  # Hidden dimension for the map polyline encoder
+                map_polyline_encoder_hidden_dim=512,  # Hidden dimension for the map polyline encoder
+                map_polyline_encoder_input_dim= 4000*20*7,  # Input dimension for the map polyline encoder
                 # Encoder and decoder parameters for object trajectories
                 encoder_hidden_dim=256,
                 encoder_output_dim=256,  # Output dimension of the encoder
@@ -57,14 +60,23 @@ class MotionLSTM(nn.Module):
                 num_modes=6,  # Number of prediction modes
                 future_steps=80,  # Number of future timesteps to predict
                 dropout=0.1):
-        
-        super().__init__()
+        super(MotionLSTM, self).__init__()
+
         self.input_dim = input_dim
         self.encoder_hidden_dim = encoder_hidden_dim
+        self.lstm_hidden_dim = lstm_hidden_dim
         self.lstm_num_layers = lstm_num_layers
         self.num_modes = num_modes
         self.future_steps = future_steps
         self.dropout = dropout
+        
+        # Map polylines encoder
+        self.map_polyline_encoder = nn.Sequential(
+            nn.Linear(map_polyline_encoder_input_dim, map_polyline_encoder_hidden_dim),  
+            nn.ReLU(),
+            nn.Linear(map_polyline_encoder_hidden_dim, map_polyline_encoder_output_dim)
+        )
+
 
         # Feature encoder for input trajectories
         self.feature_encoder = nn.Sequential(
@@ -73,8 +85,15 @@ class MotionLSTM(nn.Module):
             nn.Dropout(dropout),
             nn.Linear(encoder_hidden_dim, encoder_output_dim)
         )
+
+        #fusion layer for feature encoder with map polylines
+        self.fusion_layer = nn.Sequential(
+            nn.Linear(encoder_output_dim + map_polyline_encoder_output_dim, encoder_output_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout)
+        )
+
         
-        # TODO: Add Map here
         # LSTM for temporal modeling
         self.lstm = nn.LSTM(
             input_size=encoder_output_dim,
@@ -112,13 +131,24 @@ class MotionLSTM(nn.Module):
             dropout=dropout,
             batch_first=True
         )
+        self._init_weights()
+    
+    def _init_weights(self):
+        """Initialize model weights"""
+        for name, param in self.named_parameters():
+            if 'weight' in name:
+                if len(param.shape) >= 2:
+                    nn.init.xavier_uniform_(param)
+                else:
+                    nn.init.uniform_(param, -0.1, 0.1)
+            elif 'bias' in name:
+                nn.init.constant_(param, 0)
         
     def forward(self, batch):
         """
         A batch contains:
         - batch_size
         - input_dict: a dictionary containing: {
-            'scenario_id'
             'obj_trajs'
             'obj_trajs_mask'
             'track_index_to_predict'
@@ -129,53 +159,81 @@ class MotionLSTM(nn.Module):
         }
         - batch_sample_count
         """
-        input = batch["input_dict"]
-        obj_trajs = input["obj_trajs"].to("cuda")
-        obj_pos = input["obj_trajs_pos"].to("cuda")
-        obj_last_pos = input["obj_trajs_last_pos"].to("cuda")
-        obj_type = self.convert_type(input["obj_types"]).to("cuda") # car, bicycycle, pedestrian
-        obj_trajs_mask = input['obj_trajs_mask'].to("cuda")
-        obj_of_interest = input['track_index_to_predict']
-
-        # resize everything to the right shape, then concatenate
-        num_center_objects, num_objects, num_timestamps, num_attrs = obj_trajs.shape
-        obj_last_pos = repeat(obj_last_pos, "c o p -> c o timestamps p", timestamps=num_timestamps)
-        obj_type = repeat(obj_type, "type -> centers type timestamps 1", centers=num_center_objects, timestamps=num_timestamps)
-        objs = torch.cat([obj_trajs, obj_pos, obj_last_pos, obj_type], dim=-1)
+        input_dict=batch["input_dict"]
+        obj_trajs = input_dict['obj_trajs'].to("cuda")  # (batch_size, num_objects, num_timestamps, input_dim)
+        obj_trajs_mask = input_dict['obj_trajs_mask'].to("cuda")  # (batch_size, num_objects, num_timestamps)
+        track_indices = input_dict['track_index_to_predict'].to("cuda")  # (batch_size,)
         
-        # flatten for the encoder, then expand the resulting features
-        objs = rearrange(objs, "c o t p -> (c o t) p")
-        objs_features = rearrange(self.feature_encoder(objs), "(center objs timestamps) hidden -> center objs timestamps hidden", center=num_center_objects, objs=num_objects, timestamps=num_timestamps)
+        static_map_polylines=input_dict["static_map_polylines"].to('cuda')  # (batch_size, num_polylines, num_points_each_polyline, 7)
+        static_map_polylines_mask=input_dict["static_map_polylines_mask"].to('cuda') # (batch_size, num_polylines, num_points_each_polyline)
 
-        # apply mask
-        obj_trajs_mask = repeat(obj_trajs_mask, "center objects timestamps -> center objects timestamps features", features=self.encoder_hidden_dim).float()
-        objs_features = obj_trajs_mask * objs_features
+        # obj shape
+        batch, objects, timestamps, trajs = obj_trajs.shape
 
-        # apply the LSTM across all objects
-        all_lstm = []
-        for i in range(num_objects):
-            obj_features = objs_features[:, i, :, :]  # (batch_size, num_timestamps, hidden_dim)
-            lstm_out, _ = self.lstm(obj_features)  # (batch_size, num_timestamps, hidden_dim)
-            all_lstm.append(lstm_out)
+        # map shape
+        batch, polylines, line, point = static_map_polylines.shape
 
-        post_lstm = torch.stack(all_lstm, dim=1)
-        center_objs = []
+        # apply mask than encode map 
+        map_features = static_map_polylines * rearrange(static_map_polylines_mask, "b num_poly mask -> b num_poly mask 1").float()
+        map_features = rearrange(map_features, "b num_poly num_points point -> b (num_poly num_points point)")
+        map_features = self.map_polyline_encoder(map_features)
 
-        # get the center objects
-        for i in range(num_center_objects):
-            center_idx = obj_of_interest[i]
-            center_objs.append(post_lstm[i, center_idx, :, :])
+        # encode features than apply mask
+        obj_features = rearrange(obj_trajs, "b o t p -> (b o t) p")
+        obj_features = self.feature_encoder(obj_features)
+        obj_features = rearrange(obj_features, "(b o t) e -> b o t e", b=batch, o=objects, t=timestamps, e=self.encoder_hidden_dim)
 
-        center_objs = torch.stack(center_objs, dim=0)
-        # predicted_trajs = []
-        # for mode in range(self.num_modes):
-        #     traj = self.traj_decoders[mode](center_objs)
-        #     traj = rearrange(traj, "(center future dim) -> center future dim", center=num_center_objects, future=self.future_steps, dim=4)
-        #     predicted_trajs.append(traj)
+        obj_features = obj_features * rearrange(obj_trajs_mask, "b o t -> b o t 1").float()
+
+        # concatentate map and objects, then encode them
+        map_features = repeat(map_features, "b map_features -> b o t map_features", o=objects, t=timestamps)
+        map_object_features = torch.cat([map_features, obj_features], dim=-1)
+        map_object_features = self.fusion_layer(map_object_features)
+
+        # for each object, pass it through the LSTM
+        all_lstm_outputs = []
         
+        for obj_idx in range(objects):
+            object = map_object_features[:, obj_idx, :, :]  # (batch_size, num_timestamps, hidden_dim)
+            lstm_out, _ = self.lstm(object)  # (batch_size, num_timestamps, hidden_dim)
+
+            # Take the last valid output for each sequence
+            last_outputs = []
+            for b in range(batch):
+                last_valid_idx = torch.nonzero(obj_trajs_mask[b, obj_idx, :])[-1].squeeze()
+                last_outputs.append(lstm_out[b, last_valid_idx, :])
+            
+            last_output = torch.stack(last_outputs, dim=0)  # (batch_size, hidden_dim)
+            all_lstm_outputs.append(last_output)
         
-        confidence_scores = F.softmax(self.mode_predictor(center_objs), -1)
-        return confidence_scores
+        all_lstm_outputs = torch.stack(all_lstm_outputs, dim=1)  # (batch_size, num_objects, hidden_dim)
+
+        # Apply attention mechanism for object interactions
+        attn_output, _ = self.attention(
+            all_lstm_outputs, all_lstm_outputs, all_lstm_outputs  
+        ) # (batch_size, num_objects, hidden_dim)
+
+        # Extract the objcts we are trying to predict
+        obj_interest_features = []
+        for b in range(batch):
+            obj_idx = track_indices[b]
+            obj_interest_features.append(attn_output[b, obj_idx, :])
+        obj_interest_features = torch.stack(obj_interest_features, dim=0)  # (batch_size, hidden_dim)
+        
+        # Predict mode probabilities
+        mode_logits = self.mode_predictor(obj_interest_features)  # (batch_size, num_modes)
+        pred_scores = F.softmax(mode_logits, dim=-1)
+
+        # Now predict the trajectories for each of the modes
+        pred_trajs_list = []
+        for mode_idx in range(self.num_modes):
+            traj_flat = self.traj_decoders[mode_idx](obj_interest_features)  # (batch_size, future_steps * 4)
+            traj = rearrange(traj_flat, "b (future traj) -> b future traj", future=self.future_steps, traj=4)
+            pred_trajs_list.append(traj)
+        
+        pred_trajs = torch.stack(pred_trajs_list, dim=1)  # (batch_size, num_modes, future_steps, 4)
+
+        return pred_scores, pred_trajs
 
     def _print_batch(self, batch):
         for key, val in batch["input_dict"].items():
