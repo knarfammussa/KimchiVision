@@ -1,7 +1,48 @@
-# Byte-compiled / optimized / DLL files
+# Python cache files
 __pycache__/
 *.py[cod]
-*.pyo
-
-# C extensions
 *.so
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Jupyter runtime and logs
+*.log
+*.out
+*.err
+*.pid
+
+# VS Code and editor-specific settings
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+env/
+venv/
+*.egg-info/
+.eggs/
+*.env
+*.venv
+
+# Conda environments
+*.conda
+*.ipynb-convert.py
+.env
+
+# Large data or model files (optional)
+*.pth
+*.pt
+*.h5
+*.ckpt
+*.tfrecord
+*.pkl
+*.joblib
+*.npz
+*.npy
+
+# Optional: ignore saved outputs inside notebooks
+**/.ipynb_checkpoints/*

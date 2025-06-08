@@ -26,3 +26,11 @@ export env
 ```bash
 conda env export --no-builds > full_environment.yml
 ```
+
+run notebook in tmux with papermill
+```bash
+papermill <notebook path> <notebook output path> --log-output
+
+ex: 
+papermill our_motion_lstm.ipynb our_motion_lstm_output.ipynb --log-output
+```
