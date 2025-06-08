@@ -8,22 +8,7 @@ from torchinfo import summary
 import math
 from easydict import EasyDict as edict
 
-import os
-import sys
-
 from einops import rearrange, repeat
-
-# get mtr's path
-path = "/home/dlin42/KimchiVision"
-print(f"home of the LSTM {path}, change when needed")
-sys.path.append(path)
-
-#mtr modules
-from mtr.datasets import build_dataloader
-from mtr.config import cfg, cfg_from_yaml_file
-from mtr.utils import common_utils
-
-# define model
 
 class MotionLSTM(nn.Module):
     '''
