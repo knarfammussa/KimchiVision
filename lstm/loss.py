@@ -60,7 +60,7 @@ class MotionLoss(nn.Module):
         # fancy indexing: What I am saying is, pick the winner across each batch.
         regression_loss = total_loss[torch.arange(batch_size), winner]
 
-        targets = torch.zeros([batch_size, 6]).to("cuda")
+        targets = torch.zeros([batch_size, 6]).to("cuda") # there are 6 modes to predict
         targets[torch.arange(batch_size), winner] = 1
         classification_loss = F.cross_entropy(pred_scores, targets)
 
