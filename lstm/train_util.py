@@ -1,9 +1,10 @@
 from lstm.loss import MotionLoss
+from datetime import datetime
 import torch
 import numpy as np
 
 #train loop
-def train_model(model, train_dataloader, val_dataloader, num_epochs=100, lr=1e-3):
+def train_model(model, train_dataloader, val_dataloader, num_epochs=5, lr=1e-3):
     """
     Training loop for the LSTM model
     """
@@ -16,6 +17,8 @@ def train_model(model, train_dataloader, val_dataloader, num_epochs=100, lr=1e-3
     criterion = MotionLoss()
     
     best_val_loss = float('inf')
+    now = datetime.now()
+    print(now.strftime("%Y%m%d_%H%M%S"))
     
     for epoch in range(num_epochs):
         # Training phase
@@ -71,6 +74,7 @@ def train_model(model, train_dataloader, val_dataloader, num_epochs=100, lr=1e-3
         # Save best model
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), '/files/waymo/saved_models/best_motion_lstm.pth')
+            now = datetime.now()
+            torch.save(model.state_dict(), '/files/waymo/saved_models/best_motion_lstm.pth' + now.strftime("%Y%m%d_%H%M%S"))
     
     return model
