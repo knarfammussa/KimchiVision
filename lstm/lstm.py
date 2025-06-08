@@ -44,6 +44,7 @@ class MotionLSTM(nn.Module):
                 trajectory_decoder_output_dim=256,  # Output dimension of the trajectory decoder
                 num_modes=6,  # Number of prediction modes
                 future_steps=80,  # Number of future timesteps to predict
+                state_dim=4, # x, y, vx, vy
                 dropout=0.1):
         super(MotionLSTM, self).__init__()
 
@@ -54,6 +55,7 @@ class MotionLSTM(nn.Module):
         self.num_modes = num_modes
         self.future_steps = future_steps
         self.dropout = dropout
+        self.state_dim = state_dim
         
         # Map polylines encoder
         self.map_polyline_encoder = nn.Sequential(
@@ -105,7 +107,7 @@ class MotionLSTM(nn.Module):
                 nn.Dropout(dropout),
                 nn.Linear(trajectory_decoder_hidden_dim, trajectory_decoder_hidden_dim),
                 nn.ReLU(),
-                nn.Linear(trajectory_decoder_output_dim, future_steps * 4)  # x, y, vx, vy for each timestep
+                nn.Linear(trajectory_decoder_output_dim, future_steps * self.state_dim)  # x, y, width, height, heading, vx, vy for each timestep
             ) for _ in range(num_modes)
         ])
         
@@ -212,8 +214,8 @@ class MotionLSTM(nn.Module):
         # Now predict the trajectories for each of the modes
         pred_trajs_list = []
         for mode_idx in range(self.num_modes):
-            traj_flat = self.traj_decoders[mode_idx](obj_interest_features)  # (batch_size, future_steps * 4)
-            traj = rearrange(traj_flat, "b (future traj) -> b future traj", future=self.future_steps, traj=4)
+            traj_flat = self.traj_decoders[mode_idx](obj_interest_features)  # (batch_size, future_steps * 7)
+            traj = rearrange(traj_flat, "b (future traj) -> b future traj", future=self.future_steps, traj=self.state_dim)
             pred_trajs_list.append(traj)
         
         pred_trajs = torch.stack(pred_trajs_list, dim=1)  # (batch_size, num_modes, future_steps, 4)
