@@ -20,9 +20,9 @@ from easydict import EasyDict as edict
 import os
 
 cfg_from_yaml_file("/code/jjiang23/csc587/KimchiVision/cfg/kimchiConfig.yaml", cfg)
-logger = common_utils.create_logger("/files/waymo/damon_log.txt", rank=0)
+logger = common_utils.create_logger("/files/waymo/damon_log_simple.txt", rank=0)
 args = edict({
-    "batch_size": 64,
+    "batch_size": 32,
     "workers": 32,
     "merge_all_iters_to_one_epoch": False,
     "epochs": 5,
@@ -48,7 +48,7 @@ test_set, test_loader, sampler = build_dataloader(
         dist=False, workers=args.workers, logger=logger, training=False
 )
 
-model = MotionLSTM()
+# model = MotionLSTM()
 model = SimpleMotionLSTM()
 
 # Train the model
