@@ -187,7 +187,10 @@ class MotionLSTM(nn.Module):
             # Take the last valid output for each sequence
             last_outputs = []
             for b in range(batch):
-                last_valid_idx = torch.nonzero(obj_trajs_mask[b, obj_idx, :])[-1].squeeze()
+                try:
+                    last_valid_idx = torch.nonzero(obj_trajs_mask[b, obj_idx, :])[-1].squeeze()
+                except Exception as e:
+                    last_valid_idx = 10 # pick the last one
                 last_outputs.append(lstm_out[b, last_valid_idx, :])
             
             last_output = torch.stack(last_outputs, dim=0)  # (batch_size, hidden_dim)

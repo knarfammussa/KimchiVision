@@ -11,7 +11,6 @@ def train_model(model, train_dataloader, val_dataloader, num_epochs=5, lr=1e-3):
     """
     assert torch.cuda.is_available(), "CUDA is not available. Please check your PyTorch installation."
     device = torch.device('cuda')
-    model = nn.DataParallel(model)
     model.to(device)
 
     

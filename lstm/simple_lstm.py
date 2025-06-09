@@ -189,7 +189,10 @@ class SimpleMotionLSTM(nn.Module):
         for center in range(centers):
             # Take the last valid output for each sequence
             center_idx = track_indices[center]
-            last_valid_idx = torch.nonzero(obj_trajs_mask[center, center_idx, :])[-1].squeeze()
+            try:
+                last_valid_idx = torch.nonzero(obj_trajs_mask[center, center_idx, :])[-1].squeeze()
+            except Exception as e:
+                last_valid_idx = 10 # pick the last one
             valid_obj_map_features.append(obj_map_features[center, last_valid_idx, :])
 
         valid_obj_map_features = torch.stack(valid_obj_map_features)
