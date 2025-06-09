@@ -61,8 +61,8 @@ def train_model(model, train_dataloader, val_dataloader, num_epochs=5, lr=1e-3):
                         batch_dict[key] = value.to(device)
                 
                 pred_scores, pred_trajs = model(batch_dict)
-                loss_dict = criterion(pred_scores, pred_trajs, batch_dict)
-                val_losses.append(loss_dict['total_loss'].item())
+                loss = criterion(pred_scores, pred_trajs, batch_dict)
+                val_losses.append(loss)
         
         scheduler.step()
         
