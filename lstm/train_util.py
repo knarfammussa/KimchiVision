@@ -2,6 +2,7 @@ from lstm.loss import MotionLoss
 from datetime import datetime
 import torch
 import numpy as np
+from torch import nn
 
 #train loop
 def train_model(model, train_dataloader, val_dataloader, num_epochs=5, lr=1e-3):
@@ -10,7 +11,9 @@ def train_model(model, train_dataloader, val_dataloader, num_epochs=5, lr=1e-3):
     """
     assert torch.cuda.is_available(), "CUDA is not available. Please check your PyTorch installation."
     device = torch.device('cuda')
+    model = nn.DataParallel(model)
     model.to(device)
+
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
@@ -48,6 +51,7 @@ def train_model(model, train_dataloader, val_dataloader, num_epochs=5, lr=1e-3):
             
             if batch_idx % 100 == 0:
                 print(f'Epoch {epoch}, Batch {batch_idx}, Loss: {loss.item():.4f}')
+
         
         # Validation phase
         model.eval()
@@ -66,8 +70,8 @@ def train_model(model, train_dataloader, val_dataloader, num_epochs=5, lr=1e-3):
         
         scheduler.step()
         
-        avg_train_loss = np.mean(train_losses)
-        avg_val_loss = np.mean(val_losses)
+        avg_train_loss = torch.Tensor(train_losses).mean()
+        avg_val_loss = torch.Tensor(val_losses).mean()
         
         print(f'Epoch {epoch}: Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}')
         
@@ -76,5 +80,5 @@ def train_model(model, train_dataloader, val_dataloader, num_epochs=5, lr=1e-3):
             best_val_loss = avg_val_loss
             now = datetime.now()
             torch.save(model.state_dict(), '/files/waymo/saved_models/best_motion_lstm.pth' + now.strftime("%Y%m%d_%H%M%S"))
-    
+
     return model
