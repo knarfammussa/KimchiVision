@@ -16,7 +16,7 @@ class MotionLoss(nn.Module):
                  future_loss_weight=1.0,
                  gamma=0.025 # this gamma is chosen because at timestep 80, the time weight won't be zero
                 ):
-        super(MotionLoss, self).__init__()
+        super().__init__()
         self.reg_weight = regression_loss_weight
         self.cls_weight = classification_loss_weight
         self.future_weight = future_loss_weight
