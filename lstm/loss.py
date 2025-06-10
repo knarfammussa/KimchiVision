@@ -65,4 +65,5 @@ class MotionLoss(nn.Module):
         classification_loss = F.cross_entropy(pred_scores, targets)
 
         loss = (self.reg_weight * regression_loss + self.cls_weight * classification_loss)
+
         return loss.mean()
