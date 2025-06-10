@@ -9,6 +9,7 @@ import os
 import torch
 import tqdm
 from torch.nn.utils import clip_grad_norm_
+from lstm.loss import MotionLoss
 
 
 def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
@@ -18,6 +19,7 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
         dataloader_iter = iter(train_loader)
 
     optimizer, optimizer_2 = optimizer if isinstance(optimizer, list) else (optimizer, None)
+    criterion = MotionLoss()
 
     if rank == 0:
         pbar = tqdm.tqdm(total=total_it_each_epoch, leave=leave_pbar, desc='train', dynamic_ncols=True)
@@ -49,7 +51,8 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
         if optimizer_2 is not None:
             optimizer_2.zero_grad()
 
-        loss, tb_dict, disp_dict = model(batch)
+        pred_scores, pred_trajs = model(batch)
+        loss = criterion(pred_scores, pred_trajs, batch)
 
         loss.backward()
 
