@@ -18,90 +18,6 @@ import torch
 import tqdm
 from torch.nn.utils import clip_grad_norm_
 
-class TrajectoryLoss(nn.Module):
-    """
-    Loss function for trajectory prediction
-    """
-    
-    def __init__(self, 
-                 regression_loss_weight=1.0,
-                 classification_loss_weight=1.0,
-                 future_loss_weight=1.0):
-        super(TrajectoryLoss, self).__init__()
-        self.reg_weight = regression_loss_weight
-        self.cls_weight = classification_loss_weight
-        self.future_weight = future_loss_weight
-    
-    def forward(self, pred_scores, pred_trajs, batch_dict):
-        """
-        Compute loss
-        
-        Args:
-            pred_scores: (batch_size, num_modes)
-            pred_trajs: (batch_size, num_modes, future_steps, 4)
-            batch_dict: Contains ground truth data
-        
-        Returns:
-            loss_dict: Dictionary containing different loss components
-        """
-        center_gt_trajs = batch_dict['input_dict']['center_gt_trajs'].to('cuda')  # (batch_size, future_steps, 4)
-        center_gt_trajs_mask = batch_dict['input_dict']['center_gt_trajs_mask'].to('cuda')  # (batch_size, future_steps)
-        
-        batch_size, num_modes, future_steps, _ = pred_trajs.shape
-        
-        # Compute trajectory regression loss for each mode
-        gt_trajs_expanded = center_gt_trajs.unsqueeze(1).expand(-1, num_modes, -1, -1)
-        gt_mask_expanded = center_gt_trajs_mask.unsqueeze(1).expand(-1, num_modes, -1)
-        
-        # L2 loss for position (x, y)
-        pos_loss = F.mse_loss(
-            pred_trajs[:, :, :, :2] * gt_mask_expanded.unsqueeze(-1),
-            gt_trajs_expanded[:, :, :, :2] * gt_mask_expanded.unsqueeze(-1),
-            reduction='none'
-        ).sum(dim=-1)  # (batch_size, num_modes, future_steps)
-        
-        # L2 loss for velocity (vx, vy)
-        vel_loss = F.mse_loss(
-            pred_trajs[:, :, :, 2:4] * gt_mask_expanded.unsqueeze(-1),
-            gt_trajs_expanded[:, :, :, 2:4] * gt_mask_expanded.unsqueeze(-1),
-            reduction='none'
-        ).sum(dim=-1)  # (batch_size, num_modes, future_steps)
-        
-        # Weighted loss over time (give more weight to near future)
-        time_weights = torch.exp(-0.1 * torch.arange(future_steps, device=pred_trajs.device))
-        time_weights = time_weights.view(1, 1, -1)
-        
-        pos_loss = (pos_loss * time_weights * gt_mask_expanded).sum(dim=-1)  # (batch_size, num_modes)
-        vel_loss = (vel_loss * time_weights * gt_mask_expanded).sum(dim=-1)  # (batch_size, num_modes)
-        
-        # Find best mode for each sample
-        total_traj_loss = pos_loss + vel_loss  # (batch_size, num_modes)
-        best_mode_indices = torch.argmin(total_traj_loss, dim=1)  # (batch_size,)
-        
-        # Regression loss (best mode)
-        best_pos_loss = pos_loss[torch.arange(batch_size), best_mode_indices].mean()
-        best_vel_loss = vel_loss[torch.arange(batch_size), best_mode_indices].mean()
-        regression_loss = best_pos_loss + best_vel_loss
-        
-        # Classification loss (encourage higher confidence for best mode)
-        target_scores = torch.zeros_like(pred_scores)
-        target_scores[torch.arange(batch_size), best_mode_indices] = 1.0
-        classification_loss = F.cross_entropy(pred_scores, target_scores)
-        
-        # Total loss
-        total_loss = (self.reg_weight * regression_loss + 
-                     self.cls_weight * classification_loss)
-        
-        loss_dict = {
-            'total_loss': total_loss,
-            'regression_loss': regression_loss,
-            'classification_loss': classification_loss,
-            'pos_loss': best_pos_loss,
-            'vel_loss': best_vel_loss
-        }
-        
-        return loss_dict
-
 
 def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
                     rank, tbar, total_it_each_epoch, dataloader_iter, tb_log=None, leave_pbar=False, scheduler=None, show_grad_curve=False,
@@ -116,8 +32,6 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
 
     ckpt_save_cnt = 1
     start_it = accumulated_iter % total_it_each_epoch
-    criterion = TrajectoryLoss()
-    train_losses = []
 
     for cur_it in range(start_it, total_it_each_epoch):
         try:
@@ -142,11 +56,10 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
         if optimizer_2 is not None:
             optimizer_2.zero_grad()
 
-        loss_dict = model(batch)
-        # Forward pass
-        disp_dict = {}
+        
+        loss, tb_dict, disp_dict = model(batch)
+
         # Compute loss
-        loss = loss_dict['total_loss']
         
         # Backward pass
         loss.backward()
