@@ -162,7 +162,7 @@ def train_model(model, optimizer, train_loader, optim_cfg,
 
             # eval the model
             if test_loader is not None and (trained_epoch % ckpt_save_interval == 0 or trained_epoch in [1, 2, 4] or trained_epoch > total_epochs - 10):
-                from eval_utils import eval_one_epoch
+                from eval_utils2 import eval_one_epoch
 
                 pure_model = model
                 torch.cuda.empty_cache()
