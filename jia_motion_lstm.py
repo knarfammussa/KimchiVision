@@ -3,10 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 #define loss function
 class MotionLoss(nn.Module):
-    """
-    Loss function for trajectory prediction
-    """
-    
     def __init__(self, 
                  regression_loss_weight=1.0,
                  classification_loss_weight=1.0,
@@ -17,19 +13,11 @@ class MotionLoss(nn.Module):
         self.future_weight = future_loss_weight
     
     def forward(self, pred_scores, pred_trajs, batch_dict):
-        """
-        Compute loss
+        # Get device from predictions instead of hardcoding 'cuda'
+        device = pred_scores.device
         
-        Args:
-            pred_scores: (batch_size, num_modes)
-            pred_trajs: (batch_size, num_modes, future_steps, 4)
-            batch_dict: Contains ground truth data
-        
-        Returns:
-            loss_dict: Dictionary containing different loss components
-        """
-        center_gt_trajs = batch_dict['input_dict']['center_gt_trajs'].to('cuda')  # (batch_size, future_steps, 4)
-        center_gt_trajs_mask = batch_dict['input_dict']['center_gt_trajs_mask'].to('cuda')  # (batch_size, future_steps)
+        center_gt_trajs = batch_dict['input_dict']['center_gt_trajs'].to(device)
+        center_gt_trajs_mask = batch_dict['input_dict']['center_gt_trajs_mask'].to(device)
         
         batch_size, num_modes, future_steps, _ = pred_trajs.shape
         
@@ -42,35 +30,33 @@ class MotionLoss(nn.Module):
             pred_trajs[:, :, :, :2] * gt_mask_expanded.unsqueeze(-1),
             gt_trajs_expanded[:, :, :, :2] * gt_mask_expanded.unsqueeze(-1),
             reduction='none'
-        ).sum(dim=-1)  # (batch_size, num_modes, future_steps)
+        ).sum(dim=-1)
         
         # L2 loss for velocity (vx, vy)
         vel_loss = F.mse_loss(
             pred_trajs[:, :, :, 2:4] * gt_mask_expanded.unsqueeze(-1),
             gt_trajs_expanded[:, :, :, 2:4] * gt_mask_expanded.unsqueeze(-1),
             reduction='none'
-        ).sum(dim=-1)  # (batch_size, num_modes, future_steps)
+        ).sum(dim=-1)
         
-        # Weighted loss over time (give more weight to near future)
-        time_weights = torch.exp(-0.025 * torch.arange(future_steps, device=pred_trajs.device))
+        # Weighted loss over time
+        time_weights = torch.exp(-0.025 * torch.arange(future_steps, device=device))
         time_weights = time_weights.view(1, 1, -1)
         
-        pos_loss = (pos_loss * time_weights * gt_mask_expanded).sum(dim=-1)  # (batch_size, num_modes)
-        vel_loss = (vel_loss * time_weights * gt_mask_expanded).sum(dim=-1)  # (batch_size, num_modes)
+        pos_loss = (pos_loss * time_weights * gt_mask_expanded).sum(dim=-1)
+        vel_loss = (vel_loss * time_weights * gt_mask_expanded).sum(dim=-1)
         
         # Find best mode for each sample
-        total_traj_loss = pos_loss + vel_loss  # (batch_size, num_modes)
-        best_mode_indices = torch.argmin(total_traj_loss, dim=1)  # (batch_size,)
+        total_traj_loss = pos_loss + vel_loss
+        best_mode_indices = torch.argmin(total_traj_loss, dim=1)
         
         # Regression loss (best mode)
         best_pos_loss = pos_loss[torch.arange(batch_size), best_mode_indices].mean()
         best_vel_loss = vel_loss[torch.arange(batch_size), best_mode_indices].mean()
         regression_loss = best_pos_loss + best_vel_loss
         
-        # Classification loss (encourage higher confidence for best mode)
-        target_scores = torch.zeros_like(pred_scores)
-        target_scores[torch.arange(batch_size), best_mode_indices] = 1.0
-        classification_loss = F.cross_entropy(pred_scores, target_scores)
+        # FIXED: Classification loss - use class indices directly
+        classification_loss = F.cross_entropy(pred_scores, best_mode_indices)
         
         # Total loss
         total_loss = (self.reg_weight * regression_loss + 

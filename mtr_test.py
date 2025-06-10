@@ -21,7 +21,7 @@ from mtr.config import cfg, cfg_from_list, cfg_from_yaml_file, log_config_to_fil
 from mtr.datasets import build_dataloader
 from mtr.utils import common_utils
 
-
+from jia_motion_lstm import MotionLSTM
 def parse_config():
     # parser = argparse.ArgumentParser(description='arg parser')
     # parser.add_argument('--cfg_file', type=str, default=None, help='specify the config for training')
@@ -78,8 +78,9 @@ def parse_config():
     ##########
     # IMPORTANT: SET THIS BELOW
     ###########
-    "ckpt_dir": "/code/jjiang23/csc587/KimchiVision/output/ckpt/latest_model.pth"
-    
+    "ckpt_dir": "/code/jjiang23/csc587/KimchiVision/output/ckpt/latest_model.pth",
+    "modelFN": MotionLSTM,
+    "output_dir": "/code/jjiang23/csc587/KimchiVision/output/motion_lstm",
 
     
     
@@ -189,7 +190,7 @@ def main():
         assert args.batch_size % total_gpus == 0, 'Batch size should match the number of gpus'
         args.batch_size = args.batch_size // total_gpus
           
-    output_dir = cfg.ROOT_DIR / 'output' / 'eval'
+    output_dir = Path(output_dir) / 'output' / 'eval'
     output_dir.mkdir(parents=True, exist_ok=True)
 
     eval_output_dir = output_dir / 'eval'

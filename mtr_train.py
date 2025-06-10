@@ -36,6 +36,7 @@ from train_utils.train_utils import train_model
 
 from trajectory_lstm import TrajectoryLSTM
 from jia_motion_lstm import MotionLSTM
+from seq_seq_motion_lstm import Seq2SeqMotionLSTM
 
 def parse_config():
     # parser = argparse.ArgumentParser(description='arg parser')
@@ -71,10 +72,10 @@ def parse_config():
     cfg_from_yaml_file("/code/jjiang23/csc587/KimchiVision/cfg/kimchiConfig.yaml", cfg)
     # take all default args
     args = edict({
-    "batch_size": 64,
+    "batch_size": 32,
     "workers": 4,
     "merge_all_iters_to_one_epoch": False,
-    "epochs": 1,
+    "epochs": 5,
     "add_worker_init_fn": False,
     "extra_tag": 'default',
     "launcher": 'pytorch',
@@ -102,6 +103,8 @@ def parse_config():
     # IMPORTANT: SET THIS BELOW
     ###########
     "modelFN": MotionLSTM,
+    "output_dir": "/code/jjiang23/csc587/KimchiVision/output/motion_lstm",
+
 
     
     
@@ -176,7 +179,7 @@ def main():
     if args.fix_random_seed:
         common_utils.set_random_seed(666)
 
-    output_dir = Path("/code/jjiang23/csc587/KimchiVision/output/")
+    output_dir = Path(args.output_dir)
     ckpt_dir = output_dir / 'ckpt'
     output_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
@@ -266,7 +269,7 @@ def main():
         dist=dist_train, workers=args.workers, logger=logger, training=False
     )
 
-    eval_output_dir = Path("/code/jjiang23/csc587/KimchiVision/output/eval")
+    eval_output_dir = output_dir / 'eval_with_train'
     eval_output_dir.mkdir(parents=True, exist_ok=True)
 
     # -----------------------start training---------------------------

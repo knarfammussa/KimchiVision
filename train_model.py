@@ -23,7 +23,7 @@ cfg_from_yaml_file("/code/jjiang23/csc587/KimchiVision/cfg/kimchiConfig.yaml", c
 logger = common_utils.create_logger("/files/waymo/damon_log.txt", rank=0)
 args = edict({
     "batch_size": 64,
-    "workers": 32,
+    "workers": 4,
     "merge_all_iters_to_one_epoch": False,
     "epochs": 5,
     "add_worker_init_fn": False,
