@@ -34,3 +34,8 @@ papermill <notebook path> <notebook output path> --log-output
 ex: 
 papermill our_motion_lstm.ipynb our_motion_lstm_output.ipynb --log-output
 ```
+Run train inparaell
+IMPORTANT: MAKE SURE BATCH SIZE IS DIVISIBLE BY NUMBER OF GPUs
+```bash
+CUDA_VISIBLE_DEVICES=0,1,3 torchrun --nproc_per_node=3 mtr_train.py
+```
