@@ -142,12 +142,10 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
         if optimizer_2 is not None:
             optimizer_2.zero_grad()
 
-        # loss, tb_dict, disp_dict = model(batch)
+        loss_dict = model(batch)
         # Forward pass
-        pred_scores, pred_trajs = model(batch)
         disp_dict = {}
         # Compute loss
-        loss_dict = criterion(pred_scores, pred_trajs, batch)
         loss = loss_dict['total_loss']
         
         # Backward pass
@@ -168,7 +166,7 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
         # log to console and tensorboard
         
         if rank == 0:
-            print("This itteration loss: ", loss.item())
+            # print("This itteration loss: ", loss.item())
             if accumulated_iter % logger_iter_interval == 0 or cur_it == start_it or cur_it + 1 == total_it_each_epoch:
                 trained_time_past_all = tbar.format_dict['elapsed']
                 second_each_iter = pbar.format_dict['elapsed'] / max(cur_it - start_it + 1, 1.0)
