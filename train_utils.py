@@ -64,7 +64,6 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
             optimizer_2.step()
 
         accumulated_iter += 1
-        disp_dict.update({'loss': loss.item(), 'lr': cur_lr})
 
         # log to console and tensorboard
         if rank == 0:
@@ -76,23 +75,11 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
                 remaining_second_each_epoch = second_each_iter * (total_it_each_epoch - cur_it)
                 remaining_second_all = second_each_iter * ((total_epochs - cur_epoch) * total_it_each_epoch - cur_it)
 
-                disp_str = ', '.join([f'{key}={val:.3f}' for key, val in disp_dict.items() if key != 'lr'])
-                disp_str += f', lr={disp_dict["lr"]}'
                 batch_size = batch.get('batch_size', None)
                 logger.info(f'epoch: {cur_epoch}/{total_epochs}, acc_iter={accumulated_iter}, cur_iter={cur_it}/{total_it_each_epoch}, batch_size={batch_size}, iter_cost={second_each_iter:.2f}s, '
                             f'time_cost(epoch): {tbar.format_interval(trained_time_each_epoch)}/{tbar.format_interval(remaining_second_each_epoch)}, '
-                            f'time_cost(all): {tbar.format_interval(trained_time_past_all)}/{tbar.format_interval(remaining_second_all)}, '
-                            f'{disp_str}')
+                            f'time_cost(all): {tbar.format_interval(trained_time_past_all)}/{tbar.format_interval(remaining_second_all)}, ')
 
-            if tb_log is not None:
-                tb_log.add_scalar('meta_data/learning_rate', cur_lr, accumulated_iter)
-                for key, val in tb_dict.items():
-                    tb_log.add_scalar('train/' + key, val, accumulated_iter)
-                tb_log.add_scalar('train/total_norm', total_norm, accumulated_iter)
-                if show_grad_curve:
-                    for key, val in model.named_parameters():
-                        key = key.replace('.', '/')
-                        tb_log.add_scalar('train_grad/' + key, val.grad.abs().max().item(), accumulated_iter)
 
             time_past_this_epoch = pbar.format_dict['elapsed']
             if time_past_this_epoch // ckpt_save_time_interval >= ckpt_save_cnt:
@@ -175,7 +162,7 @@ def train_model(model, optimizer, train_loader, optim_cfg,
 
             # eval the model
             if test_loader is not None and (trained_epoch % ckpt_save_interval == 0 or trained_epoch in [1, 2, 4] or trained_epoch > total_epochs - 10):
-                from eval_utils.eval_utils import eval_one_epoch
+                from eval_utils import eval_one_epoch
 
                 pure_model = model
                 torch.cuda.empty_cache()
