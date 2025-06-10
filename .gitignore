@@ -46,3 +46,5 @@ venv/
 
 # Optional: ignore saved outputs inside notebooks
 **/.ipynb_checkpoints/*
+
+output/
