@@ -142,7 +142,7 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
         if optimizer_2 is not None:
             optimizer_2.zero_grad()
 
-        loss_dict = model(batch)
+        loss_dict, pred_scores, pred_trajs = model(batch)
         # Forward pass
         disp_dict = {}
         # Compute loss
