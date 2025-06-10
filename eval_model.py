@@ -20,14 +20,14 @@ import torch
 device = torch.device('cuda')
 model = SimpleMotionLSTM()
 model.to(device)
-model_path = '/files/waymo/saved_models/best_motion_lstm.pth20250609_111228'
+model_path = '/files/waymo/saved_models/best_motion_lstm.pth20250610_101158'
 state_dict = torch.load(model_path, map_location='cuda')
 model.load_state_dict(torch.load(model_path, map_location='cuda'))
 
 cfg_from_yaml_file("/code/jjiang23/csc587/KimchiVision/cfg/kimchiConfig.yaml", cfg)
 logger = common_utils.create_logger("/files/waymo/damon_log_simple.txt", rank=0)
 args = edict({
-    "batch_size": 2,
+    "batch_size": 32,
     "workers": 32,
     "merge_all_iters_to_one_epoch": False,
     "epochs": 5,
