@@ -118,7 +118,7 @@ class SimpleMotionLSTM(nn.Module):
             elif 'bias' in name:
                 nn.init.constant_(param, 0)
         
-    def forward(self, batch):
+    def forward(self, batch, is_training=False):
         """
         A batch contains:
         - batch_size
@@ -146,7 +146,7 @@ class SimpleMotionLSTM(nn.Module):
         centers, objects, timesteps, trajs = obj_trajs.shape
 
         # map shape
-        batch, polylines, line, point = map_polylines.shape
+        batch_count, polylines, line, point = map_polylines.shape
 
         # mask the objects
         obj_trajs_mask = rearrange(obj_trajs_mask, "centers objects timesteps -> centers objects timesteps 1")
@@ -216,6 +216,12 @@ class SimpleMotionLSTM(nn.Module):
         
         # Predict mode probabilities
         pred_scores = torch.stack(pred_scores_list)  # (batch_size, num_modes)
+
+        if not is_training:
+            pred_trajs = torch.cat([pred_trajs[:, :, :, :2], torch.zeros_like(pred_trajs)[:, :, :, :3], pred_trajs[:, :, :, 2:4]], dim=-1)
+            batch["pred_scores"] = pred_scores
+            batch["pred_trajs"] = pred_trajs
+            return batch
 
         return pred_scores, pred_trajs
 
