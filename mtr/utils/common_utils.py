@@ -193,24 +193,30 @@ def init_dist_pytorch(tcp_port, local_rank, backend='nccl'):
 
 
 def merge_results_dist(result_part, size, tmpdir):
-    rank, world_size = get_dist_info()
-    os.makedirs(tmpdir, exist_ok=True)
+    try:
+        rank, world_size = get_dist_info()
+        
+        os.makedirs(tmpdir, exist_ok=True)
 
-    dist.barrier()
-    pickle.dump(result_part, open(os.path.join(tmpdir, 'result_part_{}.pkl'.format(rank)), 'wb'))
-    dist.barrier()
+        dist.barrier()
+        pickle.dump(result_part, open(os.path.join(tmpdir, 'result_part_{}.pkl'.format(rank)), 'wb'))
+        print("Rank {} dumped results to {}".format(rank, os.path.join(tmpdir, 'result_part_{}.pkl'.format(rank))))
+        dist.barrier()
 
-    if rank != 0:
-        return None
+        if rank != 0:
+            return None
 
-    part_list = []
-    for i in range(world_size):
-        part_file = os.path.join(tmpdir, 'result_part_{}.pkl'.format(i))
-        part_list.append(pickle.load(open(part_file, 'rb')))
+        part_list = []
+        for i in range(world_size):
+            part_file = os.path.join(tmpdir, 'result_part_{}.pkl'.format(i))
+            part_list.append(pickle.load(open(part_file, 'rb')))
 
-    ordered_results = []
-    for res in zip(*part_list):
-        ordered_results.extend(list(res))
-    ordered_results = ordered_results[:size]
-    shutil.rmtree(tmpdir)
+        ordered_results = []
+        for res in zip(*part_list):
+            ordered_results.extend(list(res))
+        ordered_results = ordered_results[:size]
+        shutil.rmtree(tmpdir)
+    except Exception as e:
+        logging.error(f"Error during merging results: {e}")
+        ordered_results = []
     return ordered_results

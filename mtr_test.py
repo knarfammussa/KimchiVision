@@ -53,7 +53,7 @@ def parse_config():
     "epochs": 1,
     "add_worker_init_fn": False,
     "eval_tag": 'default',
-    "launcher": 'none',
+    "launcher": 'pytorch',
     "tcp_port": 18888,
     "without_sync_bn": False,
     "fix_random_seed": False,
@@ -69,7 +69,7 @@ def parse_config():
     "ckpt_save_time_interval": 300,
     "add_worker_init_fn": False,
     "pretrained_model": None,
-    "ckpt": None,
+    "ckpt": '/code/jjiang23/csc587/KimchiVision/output/jia2_motion_lstm/ckpt/checkpoint_epoch_1.pth',
     "cfg_file": None,
     "fix_random_seed": False,
     "extra_tag": 'default',
@@ -78,9 +78,9 @@ def parse_config():
     ##########
     # IMPORTANT: SET THIS BELOW
     ###########
-    "ckpt_dir": "/code/jjiang23/csc587/KimchiVision/output/ckpt/latest_model.pth",
+    "ckpt_dir": None,
     "modelFN": MotionLSTM,
-    "output_dir": "/code/jjiang23/csc587/KimchiVision/output/motion_lstm",
+    "output_dir": "/code/jjiang23/csc587/KimchiVision/output/jia2_motion_lstm",
 
     
     
@@ -93,6 +93,7 @@ def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id
     # load checkpoint
     if args.ckpt is not None: 
         it, epoch = model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=dist_test)
+        # it, epoch = model.load_params_with_optimizer(filename=args.ckpt, logger=logger, to_cpu=dist_test)
     else:
         it, epoch = -1, -1
     model.cuda()
@@ -179,6 +180,8 @@ def main():
         dist_test = False
         total_gpus = 1
     else:
+        if args.local_rank is None:
+            args.local_rank = int(os.environ.get('LOCAL_RANK', '0'))
         total_gpus, cfg.LOCAL_RANK = getattr(common_utils, 'init_dist_%s' % args.launcher)(
             args.tcp_port, args.local_rank, backend='nccl'
         )
@@ -190,7 +193,7 @@ def main():
         assert args.batch_size % total_gpus == 0, 'Batch size should match the number of gpus'
         args.batch_size = args.batch_size // total_gpus
           
-    output_dir = Path(output_dir) / 'output' / 'eval'
+    output_dir = Path(args.output_dir) / 'output' / 'eval'
     output_dir.mkdir(parents=True, exist_ok=True)
 
     eval_output_dir = output_dir / 'eval'
@@ -231,8 +234,8 @@ def main():
         batch_size=args.batch_size,
         dist=dist_test, workers=args.workers, logger=logger, training=False
     )
-    model = model_utils.MotionTransformer(config=cfg.MODEL)
-    model = "NOT IMPLEMENTED"
+    
+    model = args.modelFN()
     with torch.no_grad():
         if args.eval_all:
             repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir, dist_test=dist_test)

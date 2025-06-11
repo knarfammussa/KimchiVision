@@ -42,6 +42,5 @@ CUDA_VISIBLE_DEVICES=0,1,3 torchrun --nproc_per_node=3 mtr_train.py
 
 kill ghost process
 ```bash
-fuser -v /dev/nvidia*
-then kill -9 <pid>
+kill -9 $(fuser -v /dev/nvidia* 2>/dev/null | awk 'NF>1{for(i=2;i<=NF;++i)print $i}' | sort -u)
 ```

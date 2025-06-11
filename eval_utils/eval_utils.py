@@ -42,8 +42,11 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     for i, batch_dict in enumerate(dataloader):
         with torch.no_grad():
             batch_pred_dicts = model(batch_dict)
+            
             final_pred_dicts = dataset.generate_prediction_dicts(batch_pred_dicts, output_path=final_output_dir if save_to_file else None)
+            # print(f'Adding {len(final_pred_dicts)} predictions to the list.')
             pred_dicts += final_pred_dicts
+            # print(f'Current total predictions: {len(pred_dicts)}')
 
         disp_dict = {}
 
@@ -61,9 +64,16 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         progress_bar.close()
 
     if dist_test:
-        logger.info(f'Total number of samples before merging from multiple GPUs: {len(pred_dicts)}')
-        pred_dicts = common_utils.merge_results_dist(pred_dicts, len(dataset), tmpdir=result_dir / 'tmpdir')
-        logger.info(f'Total number of samples after merging from multiple GPUs (removing duplicate): {len(pred_dicts)}')
+        # logger.info(f'Total number of samples before merging from multiple GPUs: {len(pred_dicts)}')
+        # pred_dicts = common_utils.merge_results_dist(pred_dicts, len(dataset), tmpdir=result_dir / 'tmpdir')
+        # logger.info(f'Total number of samples after merging from multiple GPUs (removing duplicate): {len(pred_dicts)}')
+        if cfg.LOCAL_RANK == 0:
+            pred_dicts = common_utils.merge_results_dist(pred_dicts, len(dataset), tmpdir=result_dir / 'tmpdir')
+            logger.info(f'Total number of samples after merging from multiple GPUs (removing duplicate): {len(pred_dicts)}')
+        else:
+        # Other ranks just call to sync but don't update pred_dicts
+            common_utils.merge_results_dist(pred_dicts, len(dataset), tmpdir=result_dir / 'tmpdir')
+
 
     logger.info('*************** Performance of EPOCH %s *****************' % epoch_id)
     sec_per_example = (time.time() - start_time) / len(dataloader.dataset)

@@ -296,7 +296,8 @@ class MotionLSTM(nn.Module):
         
         # Apply attention mechanism for object interactions
         # Create attention mask: True for positions to ignore
-        attn_mask = ~(obj_trajs_mask.sum(dim=2) > 0)  # (batch_size, num_objects)
+        # make sure type is bool for attention mask
+        attn_mask = (~(obj_trajs_mask.sum(dim=2) > 0)).bool()  # (batch_size, num_objects)
         
         attn_output, _ = self.attention(
             all_lstm_outputs, all_lstm_outputs, all_lstm_outputs,
@@ -328,22 +329,84 @@ class MotionLSTM(nn.Module):
         if self.training:
             return loss_dict["total_loss"], {}, {}
         else:
-            gt_trajs = input_dict['center_gt_trajs']  # (batchsize, num_future_timestamps, 4)[x, y, vx, vy]
+            gt_trajs = input_dict['center_gt_trajs'].to('cuda')  # (batchsize, num_future_timestamps, 4)[x, y, vx, vy]
 
-            gt_trajs =  gt_trajs.unsqueeze(1).repeat(1, self.num_modes, 1, 1)#(batchsize, num_modes,future_timesteps, 4) 
-            res_trajs = gt_trajs - pred_trajs[:, :, :, 0:2] 
-            dx = res_trajs[:, :, :, 0]
-            dy = res_trajs[:, :,: , 1]
-            vx, vy = pred_trajs[..., -1, 2], pred_trajs[..., -1, 3]
-            heading = torch.atan2(vy, vx)
-            pred_trajs = torch.cat([pred_trajs[:, :, :, :2], dx, dy,
-                                    heading, 
-                                    pred_trajs[:, :, :, 2:4]], dim=-1)
+            # gt_trajs =  gt_trajs.unsqueeze(1).repeat(1, self.num_modes, 1, 1)#(batchsize, num_modes,future_timesteps, 4) 
+            # res_trajs = gt_trajs[:, :, :, 0:2] - pred_trajs[:, :, :, 0:2] 
+            # dx = res_trajs[:, :, :, 0]
+            # dy = res_trajs[:, :,: , 1]
+            # vx, vy = pred_trajs[..., -1, 2], pred_trajs[..., -1, 3]
+            # heading = torch.atan2(vy, vx)
+            # pred_trajs = torch.cat([pred_trajs[:, :, :, :2], dx, dy,
+            #                         heading, 
+            #                         pred_trajs[:, :, :, 2:4]], dim=-1)
+            # Expand gt_trajs to (B, M, T, 4)
+            gt_trajs = gt_trajs.unsqueeze(1).repeat(1, self.num_modes, 1, 1)
+
+            # Residuals (dx, dy): (B, M, T)
+            res_trajs = gt_trajs[:, :, :, 0:2] - pred_trajs[:, :, :, 0:2]
+            dx = res_trajs[:, :, :, 0:1]  # (B, M, T, 1)
+            dy = res_trajs[:, :, :, 1:2]  # (B, M, T, 1)
+
+            # Heading: computed using last timestep vx, vy
+            vx = pred_trajs[..., -1, 2]  # (B, M)
+            vy = pred_trajs[..., -1, 3]  # (B, M)
+            heading = torch.atan2(vy, vx).unsqueeze(-1).unsqueeze(-1)  # (B, M, 1, 1)
+            heading = heading.repeat(1, 1, pred_trajs.shape[2], 1)     # (B, M, T, 1)
+
+            # Reconstruct final trajs (B, M, T, 7)
+            pred_trajs = torch.cat([
+                pred_trajs[:, :, :, :2],  # x, y
+                dx, dy,                  # dx, dy
+                heading,                 # heading
+                pred_trajs[:, :, :, 2:4] # vx, vy
+            ], dim=-1)
+
 
             batch_dict['pred_scores'] = pred_scores
             batch_dict['pred_trajs'] = pred_trajs
 
             return batch_dict
+    
+    def load_params_from_file(self, filename, logger, to_cpu=False):
+        if not os.path.isfile(filename):
+            raise FileNotFoundError
+
+        logger.info('==> Loading parameters from checkpoint %s to %s' % (filename, 'CPU' if to_cpu else 'GPU'))
+        loc_type = torch.device('cpu') if to_cpu else None
+        checkpoint = torch.load(filename, map_location=loc_type)
+        model_state_disk = checkpoint['model_state']
+
+        version = checkpoint.get("version", None)
+        if version is not None:
+            logger.info('==> Checkpoint trained from version: %s' % version)
+
+        logger.info(f'The number of disk ckpt keys: {len(model_state_disk)}')
+        model_state = self.state_dict()
+        model_state_disk_filter = {}
+        for key, val in model_state_disk.items():
+            if key in model_state and model_state_disk[key].shape == model_state[key].shape:
+                model_state_disk_filter[key] = val
+            else:
+                if key not in model_state:
+                    print(f'Ignore key in disk (not found in model): {key}, shape={val.shape}')
+                else:
+                    print(f'Ignore key in disk (shape does not match): {key}, load_shape={val.shape}, model_shape={model_state[key].shape}')
+
+        model_state_disk = model_state_disk_filter
+
+        missing_keys, unexpected_keys = self.load_state_dict(model_state_disk, strict=False)
+
+        logger.info(f'Missing keys: {missing_keys}')
+        logger.info(f'The number of missing keys: {len(missing_keys)}')
+        logger.info(f'The number of unexpected keys: {len(unexpected_keys)}')
+        logger.info('==> Done (total keys %d)' % (len(model_state)))
+
+        epoch = checkpoint.get('epoch', -1)
+        it = checkpoint.get('it', 0.0)
+
+        return it, epoch
+
     def load_params_with_optimizer(self, filename, to_cpu=False, optimizer=None, logger=None):
         if not os.path.isfile(filename):
             raise FileNotFoundError
@@ -367,3 +430,4 @@ class MotionLSTM(nn.Module):
         logger.info('==> Done (loaded %d/%d)' % (len(checkpoint['model_state']), len(checkpoint['model_state'])))
 
         return it, epoch
+    

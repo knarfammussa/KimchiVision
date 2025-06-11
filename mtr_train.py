@@ -73,8 +73,8 @@ def parse_config():
     cfg_from_yaml_file("/code/jjiang23/csc587/KimchiVision/cfg/kimchiConfig.yaml", cfg)
     # take all default args
     args = edict({
-    "batch_size": 96,
-    "workers": 4,
+    "batch_size": 64,
+    "workers": 2,
     "merge_all_iters_to_one_epoch": False,
     "epochs": 5,
     "add_worker_init_fn": False,
@@ -98,7 +98,7 @@ def parse_config():
     "cfg_file": None,
     "fix_random_seed": False,
     "extra_tag": 'default',
-    "ckpt": "/code/jjiang23/csc587/KimchiVision/output/jia_motion_lstm/ckpt/latest_model.pth",
+    "ckpt": "/code/jjiang23/csc587/KimchiVision/output/jia2_motion_lstm/ckpt/latest_model.pth",
 
     ##########
     # IMPORTANT: SET THIS BELOW
