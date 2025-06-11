@@ -262,6 +262,7 @@ class TrajectoryLSTM(nn.Module):
         if self.training:
             return loss_dict["total_loss"], {}, {}
         else:
+            pred_trajs = torch.cat([pred_trajs[:, :, :, :2], torch.zeros_like(pred_trajs)[:, :, :, :3], pred_trajs[:, :, :, 2:4]], dim=-1)
             batch_dict['pred_scores'] = pred_scores
             batch_dict['pred_trajs'] = pred_trajs
 

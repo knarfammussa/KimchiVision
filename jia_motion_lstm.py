@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import os
 #define loss function
 class MotionLoss(nn.Module):
     def __init__(self, 
@@ -217,6 +218,7 @@ class MotionLSTM(nn.Module):
         """
         input_dict = batch_dict["input_dict"]
         
+        gt_trajs = input_dict['center_gt_trajs']  # (batchsize, num_future_timestamps, 4)[x, y, vx, vy]
         # Get device from model parameters
         device = next(self.parameters()).device
         
@@ -326,7 +328,42 @@ class MotionLSTM(nn.Module):
         if self.training:
             return loss_dict["total_loss"], {}, {}
         else:
+            gt_trajs = input_dict['center_gt_trajs']  # (batchsize, num_future_timestamps, 4)[x, y, vx, vy]
+
+            gt_trajs =  gt_trajs.unsqueeze(1).repeat(1, self.num_modes, 1, 1)#(batchsize, num_modes,future_timesteps, 4) 
+            res_trajs = gt_trajs - pred_trajs[:, :, :, 0:2] 
+            dx = res_trajs[:, :, :, 0]
+            dy = res_trajs[:, :,: , 1]
+            vx, vy = pred_trajs[..., -1, 2], pred_trajs[..., -1, 3]
+            heading = torch.atan2(vy, vx)
+            pred_trajs = torch.cat([pred_trajs[:, :, :, :2], dx, dy,
+                                    heading, 
+                                    pred_trajs[:, :, :, 2:4]], dim=-1)
+
             batch_dict['pred_scores'] = pred_scores
             batch_dict['pred_trajs'] = pred_trajs
 
             return batch_dict
+    def load_params_with_optimizer(self, filename, to_cpu=False, optimizer=None, logger=None):
+        if not os.path.isfile(filename):
+            raise FileNotFoundError
+
+        logger.info('==> Loading parameters from checkpoint %s to %s' % (filename, 'CPU' if to_cpu else 'GPU'))
+        loc_type = torch.device('cpu') if to_cpu else None
+        checkpoint = torch.load(filename, map_location=loc_type)
+        epoch = checkpoint.get('epoch', -1)
+        it = checkpoint.get('it', 0.0)
+
+        self.load_state_dict(checkpoint['model_state'], strict=False)
+
+        if optimizer is not None:
+            logger.info('==> Loading optimizer parameters from checkpoint %s to %s'
+                        % (filename, 'CPU' if to_cpu else 'GPU'))
+            optimizer.load_state_dict(checkpoint['optimizer_state'])
+
+        if 'version' in checkpoint:
+            print('==> Checkpoint trained from version: %s' % checkpoint['version'])
+        # logger.info('==> Done')
+        logger.info('==> Done (loaded %d/%d)' % (len(checkpoint['model_state']), len(checkpoint['model_state'])))
+
+        return it, epoch

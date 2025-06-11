@@ -47,7 +47,7 @@ def parse_config():
     cfg_from_yaml_file("/code/jjiang23/csc587/KimchiVision/cfg/kimchiConfig.yaml", cfg)
     # take all default args
     args = edict({
-    "batch_size": 32,
+    "batch_size": 96,
     "workers": 4,
     "merge_all_iters_to_one_epoch": False,
     "epochs": 1,

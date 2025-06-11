@@ -37,6 +37,7 @@ from train_utils.train_utils import train_model
 from trajectory_lstm import TrajectoryLSTM
 from jia_motion_lstm import MotionLSTM
 from seq_seq_motion_lstm import Seq2SeqMotionLSTM
+from damon_lstm import MotionLSTM as DMotionLSTM
 
 def parse_config():
     # parser = argparse.ArgumentParser(description='arg parser')
@@ -72,7 +73,7 @@ def parse_config():
     cfg_from_yaml_file("/code/jjiang23/csc587/KimchiVision/cfg/kimchiConfig.yaml", cfg)
     # take all default args
     args = edict({
-    "batch_size": 32,
+    "batch_size": 96,
     "workers": 4,
     "merge_all_iters_to_one_epoch": False,
     "epochs": 5,
@@ -97,13 +98,13 @@ def parse_config():
     "cfg_file": None,
     "fix_random_seed": False,
     "extra_tag": 'default',
-    "ckpt": None,
+    "ckpt": "/code/jjiang23/csc587/KimchiVision/output/jia_motion_lstm/ckpt/latest_model.pth",
 
     ##########
     # IMPORTANT: SET THIS BELOW
     ###########
     "modelFN": MotionLSTM,
-    "output_dir": "/code/jjiang23/csc587/KimchiVision/output/motion_lstm",
+    "output_dir": "/code/jjiang23/csc587/KimchiVision/output/jia2_motion_lstm",
 
 
     
@@ -171,6 +172,7 @@ def main():
     if args.batch_size is None:
         args.batch_size = cfg.OPTIMIZATION.BATCH_SIZE_PER_GPU
     else:
+        print(f'Using batch size {args.batch_size} with {total_gpus} gpus' )
         assert args.batch_size % total_gpus == 0, 'Batch size should match the number of gpus'
         args.batch_size = args.batch_size // total_gpus
 
@@ -230,7 +232,12 @@ def main():
     if args.ckpt is not None:
         it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist_train, optimizer=optimizer,
                                                            logger=logger)
+        # checkpoint = torch.load(args.ckpt)
+        # model.load_state_dict(checkpoint['model_state']) 
+        # optimizer.load_state_dict(checkpoint['optimizer_state'])
+        # start_epoch = 0
         last_epoch = start_epoch + 1
+
     else:
         ckpt_list = glob.glob(str(ckpt_dir / '*.pth'))
         if len(ckpt_list) > 0:

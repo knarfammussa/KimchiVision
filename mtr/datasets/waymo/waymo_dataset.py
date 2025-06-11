@@ -317,7 +317,7 @@ class WaymoDataset(DatasetTemplate):
         acce[:, :, 0, :] = acce[:, :, 1, :]
 
         ret_obj_trajs = torch.cat((
-            obj_trajs[:, :, :, 0:6], 
+            obj_trajs[:, :, :, 0:6], #[cx, cy, cz, dx, dy, dz, heading, vel_x, vel_y, valid]
             object_onehot_mask,
             object_time_embedding, 
             object_heading_embedding,

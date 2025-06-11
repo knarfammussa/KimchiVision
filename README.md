@@ -39,3 +39,9 @@ IMPORTANT: MAKE SURE BATCH SIZE IS DIVISIBLE BY NUMBER OF GPUs
 ```bash
 CUDA_VISIBLE_DEVICES=0,1,3 torchrun --nproc_per_node=3 mtr_train.py
 ```
+
+kill ghost process
+```bash
+fuser -v /dev/nvidia*
+then kill -9 <pid>
+```
